@@ -1,0 +1,149 @@
+# Tensorflow Dependencies
+
+import tensorflow as tf
+
+import keras
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, AveragePooling2D, BatchNormalization
+from keras.layers import Dense, Activation, Dropout, Flatten
+from tensorflow.keras.optimizers import Adam
+from keras.preprocessing import image
+from keras.preprocessing.image import ImageDataGenerator
+
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+# Dataset Management
+
+import sys
+!{sys.executable} -m pip install wget
+!{sys.executable} -m pip install shutil
+
+import pandas as pd
+import numpy as np
+import os
+import copy, cv2, glob, shutil
+from google.colab import files
+from sklearn.model_selection import train_test_split
+
+# Mountung drive to extract training data
+from google.colab import drive
+drive.mount('/content/drive')
+
+# Unpack Archive
+from shutil import unpack_archive
+
+zipdata_path = '/content/drive/MyDrive/Colab Notebooks/Facial Expression/facial_expression_recognition.zip'
+unpack_archive(zipdata_path,'')
+
+# Creating Path for data directory
+
+train_path = '/content/images/train'
+validation_path = '/content/images/validation'
+
+# Variable
+
+category = len(os.listdir(train_path)) # jumlah kategori
+batch_size = 128
+epochs = 50
+
+# Creating model
+
+model = Sequential()
+
+# First layer
+model.add(Conv2D(64, (3,3), activation = 'relu', input_shape = (48,48,1)))
+model.add(MaxPooling2D(2,2))
+
+# Second layer
+model.add(Conv2D(128, (3,3), activation = 'relu'))
+model.add(BatchNormalization())
+model.add(AveragePooling2D(2,2))
+
+# Third layer
+model.add(Conv2D(256, (3,3), activation = 'relu'))
+model.add(BatchNormalization())
+model.add(MaxPooling2D(2,2))
+
+# Fourth Layer
+model.add(Conv2D(512, (3,3), activation = 'relu'))
+model.add(BatchNormalization())
+model.add(AveragePooling2D(2,2))
+model.add(Dropout(0.2))
+
+model.add(Flatten())
+
+# Output layer
+model.add(Dense(512, activation = 'relu'))
+model.add(Dropout(0.2))
+model.add(Dense(256, activation = 'relu'))
+model.add(Dropout(0.2))
+model.add(Dense(category, activation = 'softmax'))
+
+model.summary()
+
+# Setup data batch processing
+
+# Add data augmentation
+train_data = ImageDataGenerator(rescale = 1./255,
+                                rotation_range = 20,
+                                zoom_range = 0.2,
+                                fill_mode='nearest'
+                                )
+
+# Flow training data using 128 batches
+train_generator = train_data.flow_from_directory(
+    directory = train_path,
+    target_size = (48,48),
+    class_mode='categorical',
+    color_mode='grayscale', 
+    batch_size = batch_size
+)
+
+# Flow validation data
+val_generator = train_data.flow_from_directory(
+    directory = validation_path,
+    target_size = (48,48), 
+    class_mode='categorical',
+    color_mode='grayscale',
+    batch_size = int(batch_size/4)
+)
+
+# Compile model
+model.compile(optimizer=Adam(lr = 0.001), loss="categorical_crossentropy", metrics = ["accuracy"])
+
+# fit model
+history = model.fit(train_generator,
+          validation_data = val_generator,
+          epochs = epochs,
+          steps_per_epoch = 225,
+          validation_steps = 55,
+          verbose = 1)
+          
+# Evaluate model
+
+import math
+
+eval = model.evaluate(val_generator)
+print("Loss: " + str(eval[0]))
+print("Accuracy: " + str(round(eval[1]*100, 2)) + " %")
+
+# Visualize training and validation data
+
+plt.figure(figsize=[20,7])
+
+plt.subplot(1, 2, 1) # row 1, col 2 index 1
+plt.plot(history.history["val_accuracy"], "b", label = "validation accuracy")
+plt.plot(history.history["accuracy"], "r", label = "training accuracy")
+plt.title("Accuracy Evaluation")
+plt.legend(loc="lower right")
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+
+plt.subplot(1, 2, 2) # index 2
+plt.plot(history.history["val_loss"], "b", label = "validation loss")
+plt.plot(history.history["loss"], "r", label = "training loss")
+plt.title("Loss Evaluation")
+plt.legend(loc="lower right")
+plt.ylabel('loss')
+plt.xlabel('Epoch')
